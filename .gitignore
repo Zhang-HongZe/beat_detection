@@ -1,0 +1,5 @@
+.vscode
+.clang
+
+build
+managed_components
