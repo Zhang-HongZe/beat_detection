@@ -65,8 +65,17 @@ static esp_err_t beat_detection_init_example(void)
 
     // 配置 Beat Detection
     beat_detection_cfg_t cfg = BEAT_DETECTION_DEFAULT_CFG();
-    cfg.callback.callback = beat_detection_result_callback;
-    cfg.callback.ctx = NULL;
+    cfg.sample_rate = I2S_SAMPLE_RATE;
+    cfg.channel = I2S_CHANNELS;
+    cfg.fft_size = FFT_SIZE;
+    cfg.bass_freq_start = 200;
+    cfg.bass_freq_end = 300;
+    cfg.bass_surge_threshold = 6.0f;
+    cfg.task_priority = 5;
+    cfg.task_stack_size = 8192;
+    cfg.task_core_id = 0;
+    cfg.result_callback = beat_detection_result_callback;
+    cfg.result_callback_ctx = NULL;
     cfg.flags.enable_psram = false;
 
     // 初始化 Beat Detection
@@ -118,7 +127,9 @@ void app_main(void)
             .bytes_size = buffer_size_bytes,  // 字节数
         };
         
-        beat_detection_audio_write(g_beat_detection_handle, buffer);
+        if (g_beat_detection_handle != NULL && g_beat_detection_handle->feed_audio != NULL) {
+            g_beat_detection_handle->feed_audio(buffer, g_beat_detection_handle);
+        }
         vTaskDelay(pdMS_TO_TICKS(500));
 
         // 发送静音数据
@@ -126,7 +137,9 @@ void app_main(void)
         buffer.audio_buffer = (uint8_t *)audio_buffer;
         buffer.bytes_size = buffer_size_bytes;
         
-        beat_detection_audio_write(g_beat_detection_handle, buffer);
+        if (g_beat_detection_handle != NULL && g_beat_detection_handle->feed_audio != NULL) {
+            g_beat_detection_handle->feed_audio(buffer, g_beat_detection_handle);
+        }
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 

@@ -25,8 +25,9 @@ static inline uint16_t beat_detection_hz_to_bin(uint16_t hz, beat_detection_hand
     return (uint16_t)bin;
 }
 
-static void beat_detection_data_write(beat_detection_handle_t handle, beat_detection_audio_buffer_t buffer)
+static void beat_detection_feed(beat_detection_audio_buffer_t buffer, void *ctx)
 {
+    beat_detection_handle_t handle = (beat_detection_handle_t)ctx;
     if (handle == NULL) {
         ESP_LOGE(TAG, "Invalid arguments");
         return;
@@ -76,7 +77,7 @@ static void beat_detection_task(void *arg)
         beat_detection_result_t result = beat_detection(handle, (int16_t *)received_buffer.audio_buffer);
         heap_caps_free(received_buffer.audio_buffer);
         if (handle->result_callback != NULL) {
-            handle->result_callback(result, handle->result_callback_ctx);
+            ((beat_detection_result_callback_t)handle->result_callback)(result, handle->result_callback_ctx);
         }
         handle->status.is_calculating = false;
     }
@@ -109,18 +110,20 @@ esp_err_t beat_detection_init(beat_detection_cfg_t *cfg, beat_detection_handle_t
     }
     memset(*handle, 0, sizeof(beat_detection_t));
 
-    (*handle)->fft_size = cfg->audio.fft_size;
-    (*handle)->sample_rate = cfg->audio.sample_rate;
-    (*handle)->channel = cfg->audio.channel;
-    (*handle)->bass_surge_threshold = cfg->bass.surge_threshold;
-    (*handle)->bass_bin_start = beat_detection_hz_to_bin(cfg->bass.freq_start, *handle);
-    (*handle)->bass_bin_end = beat_detection_hz_to_bin(cfg->bass.freq_end, *handle);
-    (*handle)->result_callback = cfg->callback.callback;
-    (*handle)->result_callback_ctx = cfg->callback.ctx;
+    (*handle)->fft_size = cfg->fft_size;
+    (*handle)->sample_rate = cfg->sample_rate;
+    (*handle)->channel = cfg->channel;
+    (*handle)->bass_surge_threshold = cfg->bass_surge_threshold;
+    (*handle)->bass_bin_start = beat_detection_hz_to_bin(cfg->bass_freq_start, *handle);
+    (*handle)->bass_bin_end = beat_detection_hz_to_bin(cfg->bass_freq_end, *handle);
+    (*handle)->feed_audio = beat_detection_feed;
+    (*handle)->feed_audio_ctx = (void *)*handle;
+    (*handle)->result_callback = cfg->result_callback;
+    (*handle)->result_callback_ctx = cfg->result_callback_ctx;
     (*handle)->status.is_calculating = false;
     (*handle)->status.enable_psram = cfg->flags.enable_psram;
     ESP_LOGI(TAG, "Bass frequency range: %d-%d Hz, bins: %d-%d", 
-             (int)cfg->bass.freq_start, (int)cfg->bass.freq_end, (*handle)->bass_bin_start, (*handle)->bass_bin_end);
+             (int)cfg->bass_freq_start, (int)cfg->bass_freq_end, (*handle)->bass_bin_start, (*handle)->bass_bin_end);
 
     (*handle)->fft_buffer = (float *)heap_caps_malloc( 2 * (*handle)->fft_size * sizeof(float), local_flags | MALLOC_CAP_8BIT);
     if ((*handle)->fft_buffer == NULL) {
@@ -163,13 +166,13 @@ esp_err_t beat_detection_init(beat_detection_cfg_t *cfg, beat_detection_handle_t
     }
 
     if (cfg->flags.enable_psram) {
-        (*handle)->task_stack_buffer = (StackType_t *)heap_caps_malloc(cfg->task.stack_size, local_flags | MALLOC_CAP_8BIT);
+        (*handle)->task_stack_buffer = (StackType_t *)heap_caps_malloc(cfg->task_stack_size, local_flags | MALLOC_CAP_8BIT);
         if ((*handle)->task_stack_buffer == NULL) {
             ESP_LOGE(TAG, "Failed to allocate memory for task stack");
             beat_detection_deinit(handle);
             return ESP_ERR_NO_MEM;
         }
-        memset((*handle)->task_stack_buffer, 0, sizeof(StackType_t) * cfg->task.stack_size);
+        memset((*handle)->task_stack_buffer, 0, sizeof(StackType_t) * cfg->task_stack_size);
 
         (*handle)->task_tcb = (StaticTask_t *)heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if ((*handle)->task_tcb == NULL) {
@@ -182,22 +185,22 @@ esp_err_t beat_detection_init(beat_detection_cfg_t *cfg, beat_detection_handle_t
         (*handle)->task_handle = xTaskCreateStaticPinnedToCore(
             beat_detection_task,
             "beat_detection_task",
-            cfg->task.stack_size, 
+            cfg->task_stack_size, 
             *handle,
-            cfg->task.priority, 
+            cfg->task_priority, 
             (*handle)->task_stack_buffer, 
             (*handle)->task_tcb, 
-            cfg->task.core_id
+            cfg->task_core_id
         );
     } else {
         xTaskCreatePinnedToCore(
             beat_detection_task,
             "beat_detection_task",
-            cfg->task.stack_size, 
+            cfg->task_stack_size, 
             *handle,
-            cfg->task.priority, 
+            cfg->task_priority, 
             &(*handle)->task_handle, 
-            cfg->task.core_id
+            cfg->task_core_id
         );
     }
 

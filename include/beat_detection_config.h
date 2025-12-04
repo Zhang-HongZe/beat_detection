@@ -10,16 +10,25 @@
 #define BEAT_DETECTION_DEFAULT_TASK_CORE_ID                             (0)
 
 #define BEAT_DETECTION_DEFAULT_CFG() {                                          \
-    .sample_rate = BEAT_DETECTION_DEFAULT_SAMPLE_RATE,                          \
-    .fft_size = BEAT_DETECTION_DEFAULT_FFT_SIZE,                                \
-    .bass_freq_start = BEAT_DETECTION_DEFAULT_BASS_FREQ_MIN,                    \
-    .bass_freq_end = BEAT_DETECTION_DEFAULT_BASS_FREQ_MAX,                      \
-    .bass_surge_threshold = BEAT_DETECTION_DEFAULT_BASS_SURGE_THRESHOLD,        \
-    .task_priority = BEAT_DETECTION_DEFAULT_TASK_PRIORITY,                      \
-    .task_stack_size = BEAT_DETECTION_DEFAULT_TASK_STACK_SIZE,                  \
-    .task_core_id = BEAT_DETECTION_DEFAULT_TASK_CORE_ID,                        \
-    .result_callback = NULL,                                                    \
-    .result_callback_ctx = NULL,                                                \
+    .audio = {                                                                  \
+        .sample_rate = BEAT_DETECTION_DEFAULT_SAMPLE_RATE,                      \
+        .channel = 1,                                                           \
+        .fft_size = BEAT_DETECTION_DEFAULT_FFT_SIZE,                            \
+    },                                                                          \
+    .bass = {                                                                   \
+        .freq_start = BEAT_DETECTION_DEFAULT_BASS_FREQ_MIN,                     \
+        .freq_end = BEAT_DETECTION_DEFAULT_BASS_FREQ_MAX,                       \
+        .surge_threshold = BEAT_DETECTION_DEFAULT_BASS_SURGE_THRESHOLD,         \
+    },                                                                          \
+    .task = {                                                                   \
+        .priority = BEAT_DETECTION_DEFAULT_TASK_PRIORITY,                       \
+        .stack_size = BEAT_DETECTION_DEFAULT_TASK_STACK_SIZE,                   \
+        .core_id = BEAT_DETECTION_DEFAULT_TASK_CORE_ID,                         \
+    },                                                                          \
+    .callback = {                                                               \
+        .callback = NULL,                                                       \
+        .ctx = NULL,                                                            \
+    },                                                                          \
     .flags = {                                                                  \
         .enable_psram = false,                                                  \
     }                                                                           \
