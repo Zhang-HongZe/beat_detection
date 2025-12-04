@@ -23,8 +23,8 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "beat_detection.h"
-#include "beat_detection_config.h"
+#include "audio_beat_detection.h"
+#include "audio_beat_detection_config.h"
 
 static const char *TAG = "BEAT_DETECTION_I2S_EXAMPLE";
 
