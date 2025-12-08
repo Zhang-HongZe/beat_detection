@@ -30,80 +30,53 @@ typedef struct {
 typedef void (*beat_detection_result_callback_t)(beat_detection_result_t result, void *ctx);
 
 /**
- * @brief Task configuration for beat detection
- */
-typedef struct {
-    UBaseType_t            priority;      /*!< Task priority */
-    uint32_t               stack_size;     /*!< Task stack size in bytes */
-    BaseType_t             core_id;        /*!< Task core ID (0 or 1) */
-} beat_detection_task_cfg_t;
-
-/**
- * @brief Audio processing configuration for beat detection
- */
-typedef struct {
-    int16_t                sample_rate;    /*!< Audio sample rate in Hz */
-    uint8_t                channel;        /*!< Number of audio channels (1 or 2) */
-    int16_t                fft_size;       /*!< FFT size (must be power of 2) */
-} beat_detection_audio_cfg_t;
-
-/**
- * @brief Bass detection configuration for beat detection
- */
-typedef struct {
-    uint16_t               freq_start;     /*!< Start frequency of bass range in Hz */
-    uint16_t               freq_end;       /*!< End frequency of bass range in Hz */
-    float                  surge_threshold; /*!< Threshold for bass surge detection */
-} beat_detection_bass_cfg_t;
-
-/**
- * @brief Callback configuration for beat detection
- */
-typedef struct {
-    beat_detection_result_callback_t callback; /*!< Result callback function */
-    void*                            ctx;       /*!< Callback context */
-} beat_detection_callback_cfg_t;
-
-/**
- * @brief Flags configuration for beat detection
- */
-typedef struct {
-    bool enable_psram : 1;  /*!< Enable PSRAM allocation */
-} beat_detection_flags_t;
-
-/**
  * @brief Beat detection configuration structure
  */
 typedef struct {
-    beat_detection_audio_cfg_t    audio;      /*!< Audio processing configuration */
-    beat_detection_bass_cfg_t     bass;       /*!< Bass detection configuration */
-    beat_detection_task_cfg_t     task;       /*!< Task configuration */
-    beat_detection_callback_cfg_t callback;   /*!< Callback configuration */
-    beat_detection_flags_t         flags;      /*!< Flags configuration */
+    struct {
+        int16_t                         sample_rate;        // 采样率（Hz），默认 16000
+        uint8_t                         channel;            // 声道数：1=单声道，2=双声道
+        int16_t                         fft_size;           // FFT 大小（2的幂次），默认 512
+        int16_t                         bass_freq_start;    // 低音频率起始（Hz），默认 200
+        int16_t                         bass_freq_end;      // 低音频率结束（Hz），默认 300
+    }audio_cfg;
+    struct {
+        UBaseType_t                     priority;           // 任务优先级，默认 3
+        uint32_t                        stack_size;         // 任务栈大小（字节），默认 8192
+        BaseType_t                      core_id;            // 任务绑定的 CPU 核心，默认 0
+    }task_cfg;
+    beat_detection_result_callback_t    result_callback;
+    void*                               result_callback_ctx;
+    struct {
+        bool enable_psram : 1;
+    }flags;
 } beat_detection_cfg_t;
 
 /**
  * @brief Internal beat detection structure (opaque to users)
  */
 typedef struct beat_detection {
-    float*                              fft_buffer;
-    int16_t                             fft_size;
-    float*                              window;
-    int16_t                             sample_rate;
-    uint8_t                             channel;
-    uint8_t                             bass_bin_start;
-    uint8_t                             bass_bin_end;
-    float                               bass_surge_threshold;
-    float*                              magnitude;
-    float*                              magnitude_prev;
-    uint64_t                            last_bass_detected_time;
-    StackType_t*                        task_stack_buffer;
-    StaticTask_t*                       task_tcb;
-    TaskHandle_t                        task_handle;
-    void*                               task_ctx;
-    beat_detection_result_callback_t    result_callback;
-    void*                               result_callback_ctx;
-    QueueHandle_t                       audio_queue;
+    struct {
+        float*                              fft_buffer;
+        int16_t                             fft_size;
+        float*                              window;
+        int16_t                             sample_rate;
+        uint8_t                             channel;
+        uint8_t                             bass_bin_start;
+        uint8_t                             bass_bin_end;
+        float*                              magnitude;
+        float*                              magnitude_prev;
+        uint64_t                            last_bass_detected_time;
+        beat_detection_result_callback_t    result_callback;
+        void*                               result_callback_ctx;
+    }audio;
+    struct {
+        StackType_t*                        task_stack_buffer;
+        StaticTask_t*                       task_tcb;
+        TaskHandle_t                        task_handle;
+        void*                               task_ctx;
+        QueueHandle_t                       audio_queue;
+    }task;
     struct {
         bool enable_psram : 1;
         bool is_calculating : 1;
@@ -111,7 +84,6 @@ typedef struct beat_detection {
 } beat_detection_t;
 
 typedef beat_detection_t* beat_detection_handle_t;
-
 
 /**
 * @brief  Initialize Beat Detection module
@@ -126,21 +98,6 @@ typedef beat_detection_t* beat_detection_handle_t;
 *       - Other   Error code if initialization failed
 */
 esp_err_t beat_detection_init(beat_detection_cfg_t *cfg, beat_detection_handle_t *handle);
-
-/**
-* @brief  Perform beat detection
-*
-*         Perform beat detection on the audio buffer.
-*         This function is weak, and can be overridden by the user.
-*
-* @param  handle  Pointer to the Beat Detection handle
-* @param  audio_buffer  Pointer to the audio buffer
-*
-* @return
-*       - ESP_OK  Beat detection successful
-*       - Other   Error code if beat detection failed
-*/
-beat_detection_result_t beat_detection(beat_detection_handle_t handle, int16_t *audio_buffer);
 
 /**
 * @brief  Deinitialize Beat Detection module

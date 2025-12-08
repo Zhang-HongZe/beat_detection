@@ -1,7 +1,0 @@
-version: 1.0.0
-description: Audio Beat Detection component
-license: Apache-2.0
-dependencies:
-  espressif/esp-dsp: '*'
-  idf: '>=5.5'
-url: https://github.com/Zhang-HongZe/beat_detection

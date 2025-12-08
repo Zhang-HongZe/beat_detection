@@ -37,10 +37,10 @@ Beat Detection 组件是一个基于 FFT（快速傅里叶变换）的音频节�
    - 计算能量总和的平均比值
 
 5. **鼓点判定**
-   - 能量突变检测：当前能量 / 前一帧能量 ≥ 阈值（默认 6.0）
-   - 平均比值检测：平均能量比值 > 5.0
-   - 能量阈值：当前低音能量 > 0.01
-   - 时间间隔：距离上次检测 > 150ms（防止重复检测）
+   - 能量突变检测：当前能量 / 前一帧能量 ≥ 阈值（默认 6.0，可通过 Kconfig 配置）
+   - 平均比值检测：平均能量比值 > 5.0（可通过 Kconfig 配置）
+   - 能量阈值：当前低音能量 > 0.01（可通过 Kconfig 配置）
+   - 时间间隔：距离上次检测 > 100ms（可通过 Kconfig 配置，防止重复检测）
 
 ## API 文档
 
@@ -48,24 +48,27 @@ Beat Detection 组件是一个基于 FFT（快速傅里叶变换）的音频节�
 
 #### `beat_detection_cfg_t`
 
-配置结构体，用于初始化 beat detection 组件。
+配置结构体，用于初始化 beat detection 组件。配置项已按功能分类为子结构体。
 
 ```c
 typedef struct {
-    int16_t                sample_rate;        // 采样率（Hz），默认 16000
-    uint8_t                channel;            // 声道数：1=单声道，2=双声道
-    int16_t                fft_size;           // FFT 大小（2的幂次），默认 512
-    uint8_t                bass_freq_start;    // 低音频率起始（Hz），默认 200
-    uint8_t                bass_freq_end;      // 低音频率结束（Hz），默认 300
-    float                  bass_surge_threshold; // 能量突变阈值，默认 6.0
-    UBaseType_t            task_priority;      // 任务优先级，默认 10
-    uint32_t               task_stack_size;    // 任务栈大小（字节），默认 8192
-    BaseType_t             task_core_id;       // 任务绑定的 CPU 核心，默认 0
-    void*                  result_callback;    // 结果回调函数
-    void*                  result_callback_ctx; // 回调函数上下文
     struct {
-        bool enable_psram : 1;                 // 是否使用 PSRAM，默认 false
-    }flags;
+        int16_t                sample_rate;                // 采样率（Hz），默认 16000
+        uint8_t                channel;                    // 声道数：1=单声道，2=双声道
+        int16_t                fft_size;                   // FFT 大小（2的幂次），默认 512
+        int16_t                bass_freq_start;            // 低音频率起始（Hz），默认 200
+        int16_t                bass_freq_end;              // 低音频率结束（Hz），默认 300
+    } audio_cfg;
+    struct {
+        UBaseType_t            priority;                   // 任务优先级，默认 3
+        uint32_t               stack_size;                 // 任务栈大小（字节），默认 5120
+        BaseType_t             core_id;                    // 任务绑定的 CPU 核心，默认 0
+    } task_cfg;
+    beat_detection_result_callback_t result_callback;      // 结果回调函数
+    void*                            result_callback_ctx;  // 回调函数上下文
+    struct {
+        bool enable_psram : 1;                             // 是否使用 PSRAM，默认 false
+    } flags;
 } beat_detection_cfg_t;
 ```
 
@@ -75,9 +78,9 @@ typedef struct {
 
 ```c
 typedef enum {
-    BEAT_NOT_DETECTED = 0,    // 未检测到鼓点
-    BEAT_DETECTED = 1,         // 检测到鼓点
-    BEAT_DETECTION_FAILED = 2, // 检测失败
+    BEAT_NOT_DETECTED = 0,        // 未检测到鼓点
+    BEAT_DETECTED = 1,            // 检测到鼓点
+    BEAT_DETECTION_FAILED = 2,    // 检测失败
 } beat_detection_result_t;
 ```
 
@@ -87,8 +90,8 @@ typedef enum {
 
 ```c
 typedef struct {
-    int16_t *audio_buffer;  // 音频数据缓冲区（16位 PCM）
-    size_t size;            // 缓冲区大小（样本数）
+    uint8_t *audio_buffer;        // 音频数据缓冲区（字节数组）
+    size_t bytes_size;            // 缓冲区大小（字节数）
 } beat_detection_audio_buffer_t;
 ```
 
@@ -116,22 +119,29 @@ esp_err_t beat_detection_init(beat_detection_cfg_t *cfg, beat_detection_handle_t
 - 如果初始化失败，`*handle` 会被设置为 `NULL`
 - 函数会创建独立的任务来处理音频数据
 
-#### `beat_detection()`
+#### `beat_detection_data_write()`
 
-执行鼓点检测（内部使用，通常不需要直接调用）。
+向 beat detection 模块写入音频数据。
 
 ```c
-beat_detection_result_t beat_detection(beat_detection_handle_t handle, int16_t *audio_buffer);
+esp_err_t beat_detection_data_write(beat_detection_handle_t handle, beat_detection_audio_buffer_t buffer);
 ```
 
 **参数：**
 - `handle`: beat detection 句柄
-- `audio_buffer`: 音频数据缓冲区（16位 PCM）
+- `buffer`: 音频缓冲区结构体
 
 **返回值：**
-- `BEAT_DETECTED`: 检测到鼓点
-- `BEAT_NOT_DETECTED`: 未检测到鼓点
-- `BEAT_DETECTION_FAILED`: 检测失败
+- `ESP_OK`: 音频数据写入成功
+- `ESP_ERR_INVALID_ARG`: 参数无效
+- `ESP_ERR_INVALID_STATE`: 组件正在计算中，无法接收新数据
+- `ESP_ERR_NO_MEM`: 内存分配失败
+- `ESP_FAIL`: 队列已满，数据写入失败
+
+**注意：**
+- 函数会将音频数据复制到内部队列，由独立任务异步处理
+- 如果队列已满或组件正在计算，函数会返回错误
+- 音频数据格式必须是 16 位 PCM
 
 #### `beat_detection_deinit()`
 
@@ -164,102 +174,47 @@ beat_detection_cfg_t cfg = BEAT_DETECTION_DEFAULT_CFG();
 
 默认值：
 - 采样率：16000 Hz
+- 声道数：2（双声道）
 - FFT 大小：512
 - 低音频率范围：200-300 Hz
-- 能量突变阈值：6.0
 - 任务优先级：3
-- 任务栈大小：8192 字节
+- 任务栈大小：5120 字节
 - CPU 核心：0
 - PSRAM：禁用
+
+### Kconfig 配置
+
+组件支持通过 ESP-IDF 的 menuconfig 系统配置检测参数。运行 `idf.py menuconfig`，进入 **Component config** → **Beat Detection Configuration** 可以配置以下参数：
+
+- **BEAT_DETECTION_THRESHOLD**：低音能量突变阈值（默认 60，实际值为 6.0）
+- **BEAT_DETECTION_AVERAGE_RATIO**：平均能量比值阈值（默认 50，实际值为 5.0）
+- **BEAT_DETECTION_MIN_ENERGY**：最小能量阈值（默认 10，实际值为 0.01）
+- **BEAT_DETECTION_TIME_INTERVAL**：两次检测之间的最小时间间隔（默认 100 ms）
+
+这些参数在编译时确定，无需在运行时修改。
 
 ### 自定义配置示例
 
 ```c
 beat_detection_cfg_t cfg = {
-    .sample_rate = 16000,
-    .channel = 2,                    // 双声道
-    .fft_size = 512,
-    .bass_freq_start = 200,
-    .bass_freq_end = 300,
-    .bass_surge_threshold = 6.0f,
-    .task_priority = 3,
-    .task_stack_size = 8192,
-    .task_core_id = 0,
+    .audio_cfg = {
+        .sample_rate = 16000,
+        .channel = 2,                    // 双声道
+        .fft_size = 512,
+        .bass_freq_start = 200,
+        .bass_freq_end = 300,
+    },
+    .task_cfg = {
+        .priority = 3,
+        .stack_size = 5120,
+        .core_id = 0,
+    },
     .result_callback = my_callback,
     .result_callback_ctx = my_ctx,
     .flags = {
         .enable_psram = true,        // 使用 PSRAM
     }
 };
-```
-
-## 使用示例
-
-### 基本使用
-
-```c
-#include "audio_beat_detection.h"
-#include "audio_beat_detection_config.h"
-
-// 结果回调函数
-static void beat_detection_result_callback(beat_detection_result_t result, void *ctx)
-{
-    if (result == BEAT_DETECTED) {
-        ESP_LOGI("APP", "Beat detected!");
-        // 发送 UART 消息或其他处理
-        const char *msg = "BEAT_DETECTED\n";
-        uart_write_bytes(UART_NUM_0, msg, strlen(msg));
-    }
-}
-
-void app_main(void)
-{
-    beat_detection_handle_t beat_detection_handle = NULL;
-    
-    // 配置 beat detection
-    beat_detection_cfg_t cfg = BEAT_DETECTION_DEFAULT_CFG();
-    cfg.result_callback = beat_detection_result_callback;
-    cfg.result_callback_ctx = NULL;
-    cfg.channel = 2;  // 双声道
-    
-    // 初始化
-    esp_err_t ret = beat_detection_init(&cfg, &beat_detection_handle);
-    if (ret != ESP_OK || beat_detection_handle == NULL) {
-        ESP_LOGE("APP", "Failed to initialize beat detection");
-        return;
-    }
-    
-    // 通过 feed_audio 函数输入音频数据
-    // beat_detection_handle->feed_audio(buffer, beat_detection_handle);
-    
-    // ... 其他代码 ...
-    
-    // 清理
-    beat_detection_deinit(&beat_detection_handle);
-}
-```
-
-### 与 GMF 框架集成
-
-```c
-// 在 GMF pipeline 的 outport_release_write 回调中
-static esp_gmf_err_io_t outport_release_write(void *handle, esp_gmf_payload_t *load, int block_ticks)
-{
-    if (g_ctx.beat_detection == NULL) {
-        return ESP_GMF_IO_OK;
-    }
-    
-    beat_detection_audio_buffer_t buffer = {
-        .audio_buffer = (int16_t *)load->buf,
-        .size = load->buf_length / sizeof(int16_t),
-    };
-    
-    if (g_ctx.beat_detection->feed_audio != NULL) {
-        g_ctx.beat_detection->feed_audio(buffer, g_ctx.beat_detection);
-    }
-    
-    return ESP_GMF_IO_OK;
-}
 ```
 
 ## 参数调优
@@ -276,17 +231,37 @@ static esp_gmf_err_io_t outport_release_write(void *handle, esp_gmf_payload_t *l
 - **150-250 Hz**：更低的频率范围，适合低音鼓
 - **250-350 Hz**：稍高的频率范围，适合某些类型的鼓
 
-### 能量突变阈值
+### 能量突变阈值（Kconfig: BEAT_DETECTION_THRESHOLD）
 
 - **6.0**：默认值，适合大多数音乐
 - **4.0-5.0**：更敏感，可能产生更多误检
 - **7.0-8.0**：更保守，可能漏检一些弱鼓点
 
+可通过 `idf.py menuconfig` 在 **Component config** → **Beat Detection Configuration** 中配置。
+
+### 平均能量比值（Kconfig: BEAT_DETECTION_AVERAGE_RATIO）
+
+- **5.0**：默认值，适合大多数场景
+- **3.0-4.0**：更敏感
+- **6.0-8.0**：更保守
+
+### 最小能量阈值（Kconfig: BEAT_DETECTION_MIN_ENERGY）
+
+- **0.01**：默认值，过滤噪声
+- **0.005**：更敏感，可能检测到噪声
+- **0.02-0.05**：更保守，只检测强信号
+
+### 时间间隔（Kconfig: BEAT_DETECTION_TIME_INTERVAL）
+
+- **100 ms**：默认值，适合大多数音乐
+- **50-80 ms**：更快的响应，可能重复检测
+- **150-200 ms**：更保守，避免重复检测
+
 ### 任务配置
 
-- **优先级**：建议设置为 5-10，确保及时处理音频数据
-- **栈大小**：默认 8192 字节，如果出现栈溢出，可以增加到 10240 或更大
-- **CPU 核心**：可以绑定到特定核心，避免与其他任务竞争
+- **优先级**：默认 3，建议设置为 3-10，确保及时处理音频数据
+- **栈大小**：默认 5120 字节，如果出现栈溢出，可以增加到 8192 或更大
+- **CPU 核心**：默认 0，可以绑定到特定核心，避免与其他任务竞争
 
 ## 注意事项
 
@@ -301,12 +276,12 @@ static esp_gmf_err_io_t outport_release_write(void *handle, esp_gmf_payload_t *l
    - 支持单声道和双声道，双声道时使用右声道（索引 1, 3, 5...）
 
 3. **数据流**
-   - 音频数据通过 `feed_audio` 函数输入
+   - 音频数据通过 `beat_detection_data_write()` 函数输入
    - 数据会被复制到内部队列，由独立任务处理
-   - 如果队列满了，新的数据会被丢弃
+   - 如果队列满了或组件正在计算，函数会返回错误，新的数据会被丢弃
 
 4. **线程安全**
-   - `feed_audio` 函数可以在任何线程中调用
+   - `beat_detection_data_write()` 函数可以在任何线程中调用
    - 检测结果通过回调函数返回，回调在检测任务中执行
    - 回调函数应尽量简短，避免阻塞
 
@@ -318,7 +293,12 @@ static esp_gmf_err_io_t outport_release_write(void *handle, esp_gmf_payload_t *l
 6. **初始化检查**
    - 初始化失败时，`*handle` 会被设置为 `NULL`
    - 使用前应检查句柄是否为 `NULL`
-   - 在调用 `feed_audio` 前确保组件已正确初始化
+   - 在调用 `beat_detection_data_write()` 前确保组件已正确初始化
+
+7. **Kconfig 配置**
+   - 检测参数（阈值、比值、能量、时间间隔）可通过 menuconfig 配置
+   - 修改配置后需要重新编译项目
+   - 配置值在编译时确定，运行时无法修改
 
 ## 依赖项
 
@@ -337,4 +317,10 @@ Apache-2.0
   - 支持单声道和双声道
   - 回调机制
   - PSRAM 支持
+
+- **v1.1.0**：重构版本
+  - 重构配置结构体，按功能分类（audio_cfg, task_cfg）
+  - 新增 `beat_detection_data_write()` API，替代内部回调机制
+  - 添加 Kconfig 支持，可通过 menuconfig 配置检测参数
+  - 优化内部结构，提高代码可维护性
 
