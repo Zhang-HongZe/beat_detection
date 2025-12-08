@@ -37,10 +37,10 @@ Beat Detection 组件是一个基于 FFT（快速傅里叶变换）的音频节�
    - 计算能量总和的平均比值
 
 5. **鼓点判定**
-   - 能量突变检测：当前能量 / 前一帧能量 ≥ 阈值（默认 6.0，可通过 Kconfig 配置）
-   - 平均比值检测：平均能量比值 > 5.0（可通过 Kconfig 配置）
-   - 能量阈值：当前低音能量 > 0.01（可通过 Kconfig 配置）
-   - 时间间隔：距离上次检测 > 100ms（可通过 Kconfig 配置，防止重复检测）
+   - 能量突变检测：当前能量 / 前一帧能量 ≥ 阈值（默认 6.0，可通过配置结构体设置）
+   - 平均比值检测：平均能量比值 > 5.0（默认值，可通过配置结构体设置）
+   - 能量阈值：当前低音能量 > 0.01（默认值，可通过配置结构体设置）
+   - 时间间隔：距离上次检测 > 100ms（默认值，可通过配置结构体设置，防止重复检测）
 
 ## API 文档
 
@@ -58,6 +58,10 @@ typedef struct {
         int16_t                fft_size;                   // FFT 大小（2的幂次），默认 512
         int16_t                bass_freq_start;            // 低音频率起始（Hz），默认 200
         int16_t                bass_freq_end;              // 低音频率结束（Hz），默认 300
+        float                  threshold;                  // 低音能量突变阈值，默认 6.0
+        float                  average_ratio;              // 平均能量比值阈值，默认 5.0
+        float                  min_energy;                 // 最小能量阈值，默认 0.01
+        uint32_t               time_interval;              // 两次检测之间的最小时间间隔（ms），默认 100
     } audio_cfg;
     struct {
         UBaseType_t            priority;                   // 任务优先级，默认 3
@@ -177,21 +181,14 @@ beat_detection_cfg_t cfg = BEAT_DETECTION_DEFAULT_CFG();
 - 声道数：2（双声道）
 - FFT 大小：512
 - 低音频率范围：200-300 Hz
+- 能量突变阈值：6.0
+- 平均能量比值阈值：5.0
+- 最小能量阈值：0.01
+- 时间间隔：100 ms
 - 任务优先级：3
 - 任务栈大小：5120 字节
 - CPU 核心：0
 - PSRAM：禁用
-
-### Kconfig 配置
-
-组件支持通过 ESP-IDF 的 menuconfig 系统配置检测参数。运行 `idf.py menuconfig`，进入 **Component config** → **Beat Detection Configuration** 可以配置以下参数：
-
-- **BEAT_DETECTION_THRESHOLD**：低音能量突变阈值（默认 60，实际值为 6.0）
-- **BEAT_DETECTION_AVERAGE_RATIO**：平均能量比值阈值（默认 50，实际值为 5.0）
-- **BEAT_DETECTION_MIN_ENERGY**：最小能量阈值（默认 10，实际值为 0.01）
-- **BEAT_DETECTION_TIME_INTERVAL**：两次检测之间的最小时间间隔（默认 100 ms）
-
-这些参数在编译时确定，无需在运行时修改。
 
 ### 自定义配置示例
 
@@ -203,6 +200,10 @@ beat_detection_cfg_t cfg = {
         .fft_size = 512,
         .bass_freq_start = 200,
         .bass_freq_end = 300,
+        .threshold = 6.0f,              // 能量突变阈值
+        .average_ratio = 5.0f,          // 平均能量比值阈值
+        .min_energy = 0.01f,            // 最小能量阈值
+        .time_interval = 100,            // 时间间隔（ms）
     },
     .task_cfg = {
         .priority = 3,
@@ -231,27 +232,25 @@ beat_detection_cfg_t cfg = {
 - **150-250 Hz**：更低的频率范围，适合低音鼓
 - **250-350 Hz**：稍高的频率范围，适合某些类型的鼓
 
-### 能量突变阈值（Kconfig: BEAT_DETECTION_THRESHOLD）
+### 能量突变阈值（audio_cfg.threshold）
 
 - **6.0**：默认值，适合大多数音乐
 - **4.0-5.0**：更敏感，可能产生更多误检
 - **7.0-8.0**：更保守，可能漏检一些弱鼓点
 
-可通过 `idf.py menuconfig` 在 **Component config** → **Beat Detection Configuration** 中配置。
-
-### 平均能量比值（Kconfig: BEAT_DETECTION_AVERAGE_RATIO）
+### 平均能量比值（audio_cfg.average_ratio）
 
 - **5.0**：默认值，适合大多数场景
 - **3.0-4.0**：更敏感
 - **6.0-8.0**：更保守
 
-### 最小能量阈值（Kconfig: BEAT_DETECTION_MIN_ENERGY）
+### 最小能量阈值（audio_cfg.min_energy）
 
 - **0.01**：默认值，过滤噪声
 - **0.005**：更敏感，可能检测到噪声
 - **0.02-0.05**：更保守，只检测强信号
 
-### 时间间隔（Kconfig: BEAT_DETECTION_TIME_INTERVAL）
+### 时间间隔（audio_cfg.time_interval）
 
 - **100 ms**：默认值，适合大多数音乐
 - **50-80 ms**：更快的响应，可能重复检测
@@ -295,10 +294,9 @@ beat_detection_cfg_t cfg = {
    - 使用前应检查句柄是否为 `NULL`
    - 在调用 `beat_detection_data_write()` 前确保组件已正确初始化
 
-7. **Kconfig 配置**
-   - 检测参数（阈值、比值、能量、时间间隔）可通过 menuconfig 配置
-   - 修改配置后需要重新编译项目
-   - 配置值在编译时确定，运行时无法修改
+7. **检测参数配置**
+   - 检测参数（阈值、比值、能量、时间间隔）通过配置结构体在初始化时设置
+   - 这些参数在运行时无法修改，如需更改需要重新初始化组件
 
 ## 依赖项
 
@@ -321,6 +319,6 @@ Apache-2.0
 - **v1.1.0**：重构版本
   - 重构配置结构体，按功能分类（audio_cfg, task_cfg）
   - 新增 `beat_detection_data_write()` API，替代内部回调机制
-  - 添加 Kconfig 支持，可通过 menuconfig 配置检测参数
+  - 检测参数（threshold, average_ratio, min_energy, time_interval）移至配置结构体，支持运行时配置
   - 优化内部结构，提高代码可维护性
 

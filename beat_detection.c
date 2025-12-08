@@ -29,13 +29,13 @@ static inline uint16_t beat_detection_hz_to_bin(uint16_t hz, beat_detection_hand
     return (uint16_t)bin;
 }
 
-static bool detect_bass_surge(float current_bass, float prev_bass)
+static bool detect_bass_surge(float current_bass, float prev_bass, beat_detection_handle_t handle)
 {
     if (prev_bass <= 0.0f) {
         return false;
     }
     float ratio = current_bass / prev_bass;
-    return (ratio >= BEAT_DETECTION_THRESHOLD);
+    return (ratio >= handle->audio.threshold);
 }
 
 static beat_detection_result_t beat_detection(beat_detection_handle_t handle, int16_t *audio_buffer)
@@ -91,9 +91,9 @@ static beat_detection_result_t beat_detection(beat_detection_handle_t handle, in
     memcpy(handle->audio.magnitude_prev, handle->audio.magnitude, sizeof(float) * handle->audio.fft_size / 2);
 
     // detect bass drum
-    if ((detect_bass_surge(current_bass, prev_bass) || average_ratio > BEAT_DETECTION_AVERAGE_RATIO) 
-        && current_bass > BEAT_DETECTION_MIN_ENERGY 
-        && xTaskGetTickCount() - handle->audio.last_bass_detected_time > pdMS_TO_TICKS(BEAT_DETECTION_TIME_INTERVAL)) {
+    if ((detect_bass_surge(current_bass, prev_bass, handle) || average_ratio > handle->audio.average_ratio) 
+        && current_bass > handle->audio.min_energy 
+        && xTaskGetTickCount() - handle->audio.last_bass_detected_time > pdMS_TO_TICKS(handle->audio.time_interval)) {
         // float surge_ratio = current_bass / prev_bass;
         // ESP_LOGI(TAG, "🎵 Bass drum detected! Energy surge: %.2fx (current=%.3f, prev=%.3f)", 
         //          surge_ratio, current_bass, prev_bass);
@@ -193,6 +193,10 @@ esp_err_t beat_detection_init(beat_detection_cfg_t *cfg, beat_detection_handle_t
     (*handle)->audio.channel = cfg->audio_cfg.channel;
     (*handle)->audio.bass_bin_start = beat_detection_hz_to_bin(cfg->audio_cfg.bass_freq_start, *handle);
     (*handle)->audio.bass_bin_end = beat_detection_hz_to_bin(cfg->audio_cfg.bass_freq_end, *handle);
+    (*handle)->audio.threshold = cfg->audio_cfg.threshold;
+    (*handle)->audio.average_ratio = cfg->audio_cfg.average_ratio;
+    (*handle)->audio.min_energy = cfg->audio_cfg.min_energy;
+    (*handle)->audio.time_interval = cfg->audio_cfg.time_interval;
     (*handle)->audio.result_callback = cfg->result_callback;
     (*handle)->audio.result_callback_ctx = cfg->result_callback_ctx;
     (*handle)->status.is_calculating = false;

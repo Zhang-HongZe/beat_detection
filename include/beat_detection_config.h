@@ -10,26 +10,10 @@
 #define BEAT_DETECTION_DEFAULT_TASK_STACK_SIZE                          (1024 * 5)
 #define BEAT_DETECTION_DEFAULT_TASK_CORE_ID                             (0)
 #define BEAT_DETECTION_DEFAULT_ENABLE_PSRAM                             (false)
-
-/* configurable parameters from Kconfig */
-#ifndef CONFIG_BEAT_DETECTION_THRESHOLD
-#define CONFIG_BEAT_DETECTION_THRESHOLD 60
-#endif
-#ifndef CONFIG_BEAT_DETECTION_AVERAGE_RATIO
-#define CONFIG_BEAT_DETECTION_AVERAGE_RATIO 50
-#endif
-#ifndef CONFIG_BEAT_DETECTION_MIN_ENERGY
-#define CONFIG_BEAT_DETECTION_MIN_ENERGY 10
-#endif
-#ifndef CONFIG_BEAT_DETECTION_TIME_INTERVAL
-#define CONFIG_BEAT_DETECTION_TIME_INTERVAL 100
-#endif
-
-/* Convert Kconfig values to actual float/int values */
-#define BEAT_DETECTION_THRESHOLD                                  ((float)CONFIG_BEAT_DETECTION_THRESHOLD / 10.0f)
-#define BEAT_DETECTION_AVERAGE_RATIO                              ((float)CONFIG_BEAT_DETECTION_AVERAGE_RATIO / 10.0f)
-#define BEAT_DETECTION_MIN_ENERGY                                 ((float)CONFIG_BEAT_DETECTION_MIN_ENERGY / 1000.0f)
-#define BEAT_DETECTION_TIME_INTERVAL                              (CONFIG_BEAT_DETECTION_TIME_INTERVAL)
+#define BEAT_DETECTION_DEFAULT_THRESHOLD                                (6.0f)
+#define BEAT_DETECTION_DEFAULT_AVERAGE_RATIO                            (5.0f)
+#define BEAT_DETECTION_DEFAULT_MIN_ENERGY                               (0.01f)
+#define BEAT_DETECTION_DEFAULT_TIME_INTERVAL                            (100)
 
 #define BEAT_DETECTION_DEFAULT_CFG() {                                          \
     .audio_cfg = {                                                              \
@@ -38,6 +22,10 @@
         .fft_size = BEAT_DETECTION_DEFAULT_FFT_SIZE,                            \
         .bass_freq_start = BEAT_DETECTION_DEFAULT_BASS_FREQ_MIN,                \
         .bass_freq_end = BEAT_DETECTION_DEFAULT_BASS_FREQ_MAX,                  \
+        .threshold = BEAT_DETECTION_DEFAULT_THRESHOLD,                          \
+        .average_ratio = BEAT_DETECTION_DEFAULT_AVERAGE_RATIO,                  \
+        .min_energy = BEAT_DETECTION_DEFAULT_MIN_ENERGY,                        \
+        .time_interval = BEAT_DETECTION_DEFAULT_TIME_INTERVAL,                  \
     },                                                                          \
     .task_cfg = {                                                               \
         .priority = BEAT_DETECTION_DEFAULT_TASK_PRIORITY,                       \

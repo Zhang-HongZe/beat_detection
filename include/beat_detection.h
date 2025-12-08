@@ -39,6 +39,10 @@ typedef struct {
         int16_t                         fft_size;           // FFT 大小（2的幂次），默认 512
         int16_t                         bass_freq_start;    // 低音频率起始（Hz），默认 200
         int16_t                         bass_freq_end;      // 低音频率结束（Hz），默认 300
+        float                           threshold;          // 低音能量突变阈值，默认 6.0f
+        float                           average_ratio;      // 平均能量比值阈值，默认 5.0f
+        float                           min_energy;         // 最小能量阈值，默认 0.01f
+        uint32_t                        time_interval;      // 两次检测之间的最小时间间隔，默认 100ms
     }audio_cfg;
     struct {
         UBaseType_t                     priority;           // 任务优先级，默认 3
@@ -64,6 +68,10 @@ typedef struct beat_detection {
         uint8_t                             channel;
         uint8_t                             bass_bin_start;
         uint8_t                             bass_bin_end;
+        float                               threshold;
+        float                               average_ratio;
+        float                               min_energy;
+        uint32_t                            time_interval;
         float*                              magnitude;
         float*                              magnitude_prev;
         uint64_t                            last_bass_detected_time;
